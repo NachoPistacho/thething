@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Thing - P2P PoC</title>
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<style>
+:root {
+  --bg: #eef0f4;
+  --card: #ffffff;
+  --shadow: 0 2px 12px rgba(0,0,0,0.08);
+  --radius: 12px;
+  --primary: #1a73e8;
+  --human: #1a73e8;
+  --thing: #d93025;
+  --text: #1a1a2e;
+  --muted: #6b7280;
+  --success: #188038;
+  --warning: #f9ab00;
+  --danger: #d93025;
+  --border: #e0e3e8;
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+#app { width: 100%; max-width: 560px; }
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 28px 24px;
+  margin-bottom: 16px;
+}
+.screen { display: none; }
+.screen.active { display: block; }
+h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 4px; }
+h2 { font-size: 1.15rem; font-weight: 600; margin-bottom: 12px; }
+p.sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 20px; }
+label { display: block; font-size: 0.85rem; font-weight: 500; margin-bottom: 4px; color: var(--muted); }
+input, button { font-family: inherit; font-size: 1rem; }
+input {
+  width: 100%; padding: 10px 14px; border: 1.5px solid var(--border);
+  border-radius: 8px; outline: none; transition: border-color 0.2s;
+}
+input:focus { border-color: var(--primary); }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 10px 20px; border: none; border-radius: 8px; font-weight: 600;
+  cursor: pointer; transition: background 0.2s, opacity 0.2s; min-width: 120px;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: #1557b0; }
+.btn-danger { background: var(--thing); color: #fff; }
+.btn-danger:hover:not(:disabled) { background: #b71c1c; }
+.btn-outline { background: transparent; border: 1.5px solid var(--border); color: var(--text); }
+.btn-outline:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+.btn-sm { padding: 6px 14px; font-size: 0.85rem; min-width: auto; }
+.btn-group { display: flex; gap: 10px; flex-wrap: wrap; }
+.input-group { display: flex; gap: 8px; }
+.input-group input { flex: 1; min-width: 0; }
+.room-id-display {
+  display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+  background: #f5f7fa; border-radius: 8px; margin: 12px 0; font-family: monospace;
+  font-size: 1.2rem; letter-spacing: 2px; user-select: all;
+}
+.room-id-display .badge {
+  font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+  padding: 3px 8px; border-radius: 4px; background: var(--primary); color: #fff; font-family: var(--font);
+}
+.divider { height: 1px; background: var(--border); margin: 18px 0; }
+.player-list { margin: 12px 0; }
+.player-item {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  border-radius: 6px; background: #f8f9fb; margin-bottom: 6px;
+}
+.player-item .dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; flex-shrink: 0; }
+.player-item .name { flex: 1; font-weight: 500; }
+.player-item .tag {
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+  padding: 2px 8px; border-radius: 4px;
+}
+.tag-host { background: #e8f0fe; color: var(--primary); }
+.tag-you { background: #e6f4ea; color: var(--success); }
+.role-banner {
+  text-align: center; padding: 14px; border-radius: 8px; margin-bottom: 16px;
+  font-size: 1.15rem; font-weight: 700; letter-spacing: 0.5px;
+}
+.role-human { background: #e8f0fe; color: var(--human); }
+.role-thing { background: #fce8e6; color: var(--thing); }
+.resources { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+.resource-card { padding: 12px; border-radius: 8px; background: #f8f9fb; }
+.resource-label { font-size: 0.75rem; font-weight: 600; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+.resource-value { font-size: 1.1rem; font-weight: 700; }
+.resource-bar { height: 4px; border-radius: 2px; background: var(--border); margin-top: 6px; overflow: hidden; }
+.resource-bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s; }
+.console-log {
+  background: #1a1a2e; color: #e0e0e0; border-radius: 8px; padding: 12px;
+  height: 200px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.8rem;
+  line-height: 1.6; margin-bottom: 16px;
+}
+.console-log .log-entry { opacity: 0; animation: fadeIn 0.3s forwards; }
+.console-log .time { color: #6b7280; }
+.console-log .event-thing { color: #fca5a5; }
+.console-log .event-info { color: #93c5fd; }
+.console-log .event-system { color: #86efac; }
+@keyframes fadeIn { to { opacity: 1; } }
+.actions { margin-top: 8px; }
+.empty-state { text-align: center; color: var(--muted); padding: 20px 0; font-size: 0.9rem; }
+.copied-tooltip { font-size: 0.8rem; color: var(--success); opacity: 0; transition: opacity 0.3s; }
+.copied-tooltip.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ==================== SCREEN: SETUP ==================== -->
+  <div id="screen-setup" class="screen active">
+    <div class="card">
+      <h1>🏔️ The Thing</h1>
+      <p class="sub">Prueba de concepto P2P — Conéctate y descubre quién es La Cosa</p>
+
+      <label for="setup-nick">Tu nombre</label>
+      <input id="setup-nick" type="text" placeholder="Ej: Alex" maxlength="20" autocomplete="off">
+
+      <div class="divider"></div>
+
+      <div class="btn-group" style="flex-direction:column;">
+        <button id="btn-create" class="btn btn-primary" style="width:100%;">🎮 Crear Sala</button>
+        <div style="position:relative; text-align:center;">
+          <span style="color:var(--muted); font-size:0.85rem;">— o —</span>
+        </div>
+        <div class="input-group">
+          <input id="setup-join-id" type="text" placeholder="ID de sala (ej: THING-A7K3)" autocomplete="off" style="text-transform:uppercase;">
+          <button id="btn-join" class="btn btn-outline" style="min-width:100px;">🔗 Unirse</button>
+        </div>
+      </div>
+
+      <div id="setup-error" style="color:var(--danger); font-size:0.85rem; margin-top:12px; display:none;"></div>
+    </div>
+  </div>
+
+  <!-- ==================== SCREEN: LOBBY ==================== -->
+  <div id="screen-lobby" class="screen">
+    <div class="card">
+      <div id="lobby-host-info"></div>
+      <div id="lobby-player-list">
+        <h2>Jugadores</h2>
+        <div class="empty-state">Esperando jugadores...</div>
+      </div>
+      <div id="lobby-host-controls" style="display:none;">
+        <div class="divider"></div>
+        <button id="btn-start" class="btn btn-primary" style="width:100%;" disabled>
+          ▶️ Empezar partida
+        </button>
+        <p style="font-size:0.8rem; color:var(--muted); text-align:center; margin-top:8px;">
+          Necesitas al menos 2 jugadores
+        </p>
+      </div>
+      <div id="lobby-client-msg" style="display:none;">
+        <div class="divider"></div>
+        <p style="text-align:center; color:var(--muted);">
+          ⏳ Esperando a que el Host inicie la partida...
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SCREEN: GAME ==================== -->
+  <div id="screen-game" class="screen">
+    <div class="card">
+      <div id="game-role-banner" class="role-banner role-human">👤 Eres HUMANO</div>
+
+      <div class="resources" id="game-resources"></div>
+
+      <div class="console-log" id="game-console">
+        <div class="log-entry"><span class="time">[SISTEMA]</span> <span class="event-system">Bienvenido a la base. Permanece alerta.</span></div>
+      </div>
+
+      <div class="actions" id="game-actions"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+const S = {
+  mode: null,          // 'host' | 'client'
+  peer: null,          // PeerJS instance
+  connections: {},     // host: { peerId: DataConnection }
+  hostConn: null,      // client: DataConnection
+  myPeerId: null,
+  myNickname: '',
+  hostPeerId: null,
+  players: [],         // [{ id, nickname }]
+
+  // Host-only game state
+  game: {
+    phase: 'lobby',    // lobby | playing
+    players: [],       // [{ id, nickname, role }]  role: 'human' | 'thing'
+    resources: { fuel: 10, food: 8, temperature: 100 },
+    events: []
+  },
+
+  // Client-only received state
+  myRole: null,
+  gameData: null
+};
+
+// ============================================================
+// UTILITIES
+// ============================================================
+function genRoomId() {
+  const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let r = 'THING-';
+  for (let i = 0; i < 4; i++) r += c[Math.floor(Math.random() * c.length)];
+  return r;
+}
+
+function timestamp() {
+  const d = new Date();
+  return String(d.getHours()).padStart(2,'0') + ':' +
+         String(d.getMinutes()).padStart(2,'0') + ':' +
+         String(d.getSeconds()).padStart(2,'0');
+}
+
+function $(id) { return document.getElementById(id); }
+
+// ============================================================
+// UI HELPERS
+// ============================================================
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $(id).classList.add('active');
+}
+
+function appendEvent(text, cls = 'event-info') {
+  const log = $('game-console');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="time">[${timestamp()}]</span> <span class="${cls}">${text}</span>`;
+  log.appendChild(entry);
+  log.scrollTop = log.scrollHeight;
+}
+
+function renderResources(r) {
+  const c = $('game-resources');
+  const maxTemp = 100, maxFuel = 20, maxFood = 20;
+  const items = [
+    { label: '🔥 Temperatura', value: r.temperature, max: maxTemp, color: r.temperature < 30 ? 'var(--danger)' : 'var(--warning)' },
+    { label: '⛽ Combustible', value: r.fuel, max: maxFuel, color: 'var(--primary)' },
+    { label: '🍔 Comida', value: r.food, max: maxFood, color: 'var(--success)' }
+  ];
+  c.innerHTML = items.map(item => `
+    <div class="resource-card">
+      <div class="resource-label">${item.label}</div>
+      <div class="resource-value">${item.value}</div>
+      <div class="resource-bar"><div class="resource-bar-fill" style="width:${Math.min(100, (item.value/item.max)*100)}%; background:${item.color};"></div></div>
+    </div>
+  `).join('');
+}
+
+function renderGameUI(data) {
+  const isThing = data.yourRole === 'thing';
+  const banner = $('game-role-banner');
+  banner.className = `role-banner ${isThing ? 'role-thing' : 'role-human'}`;
+  banner.textContent = isThing ? '🛸 Eres LA COSA' : '👤 Eres HUMANO';
+
+  renderResources(data.resources);
+
+  const actions = $('game-actions');
+  actions.innerHTML = `
+    <button class="btn btn-danger" id="btn-sabotage" style="width:100%;">
+      ⚡ Sabotear Caldera
+    </button>
+  `;
+  $('btn-sabotage').addEventListener('click', () => {
+    playerAction('sabotage_boiler');
+  });
+}
+
+function renderPlayerList() {
+  const container = $('lobby-player-list');
+  if (S.players.length === 0) {
+    container.innerHTML = '<h2>Jugadores</h2><div class="empty-state">Esperando jugadores...</div>';
+    return;
+  }
+  container.innerHTML = '<h2>Jugadores</h2>' +
+    S.players.map(p => {
+      const isMe = p.id === S.myPeerId;
+      const isHost = p.id === S.hostPeerId;
+      const tags = [];
+      if (isHost) tags.push('<span class="tag tag-host">HOST</span>');
+      if (isMe) tags.push('<span class="tag tag-you">TÚ</span>');
+      return `<div class="player-item"><span class="dot"></span><span class="name">${escHtml(p.nickname)}</span>${tags.join(' ')}</div>`;
+    }).join('');
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// ============================================================
+// PEERJS COMMUNICATION
+// ============================================================
+function createRoom(nickname) {
+  S.mode = 'host';
+  S.myNickname = nickname;
+  const roomId = genRoomId();
+
+  S.peer = new Peer(roomId);
+
+  S.peer.on('open', (id) => {
+    S.myPeerId = id;
+    S.hostPeerId = id;
+    S.players = [{ id, nickname: S.myNickname }];
+    S.game.players = [{ id, nickname: S.myNickname, role: null }];
+
+    showLobbyHost();
+  });
+
+  S.peer.on('connection', (conn) => {
+    conn.on('data', (data) => {
+      if (data.type === 'JOIN') {
+        const pid = conn.peer;
+        const nick = data.data.nickname;
+        S.connections[pid] = conn;
+        S.players.push({ id: pid, nickname: nick });
+        S.game.players.push({ id: pid, nickname: nick, role: null });
+        broadcast({ type: 'PLAYER_LIST', data: { players: S.players } });
+        renderPlayerList();
+        updateStartButton();
+        appendEventLobby(`👤 ${escHtml(nick)} se ha unido a la sala`);
+        // Send current player list to the new joiner specifically
+        sendToPlayer(pid, { type: 'PLAYER_LIST', data: { players: S.players } });
+      } else if (data.type === 'ACTION') {
+        hostHandleAction(conn.peer, data.data.action);
+      }
+    });
+
+    conn.on('close', () => {
+      const pid = conn.peer;
+      delete S.connections[pid];
+      S.players = S.players.filter(p => p.id !== pid);
+      S.game.players = S.game.players.filter(p => p.id !== pid);
+      broadcast({ type: 'PLAYER_LIST', data: { players: S.players } });
+      renderPlayerList();
+      updateStartButton();
+    });
+  });
+
+  S.peer.on('error', (err) => {
+    if (err.type === 'unavailable-id') {
+      showSetupError(`El ID ${roomId} ya está en uso. Intenta de nuevo.`);
+      S.peer.destroy();
+    } else {
+      showSetupError('Error de conexión: ' + err.message);
+    }
+  });
+}
+
+function joinRoom(hostId, nickname) {
+  S.mode = 'client';
+  S.myNickname = nickname;
+  S.hostPeerId = hostId.toUpperCase();
+
+  S.peer = new Peer();
+
+  S.peer.on('open', (id) => {
+    S.myPeerId = id;
+    const conn = S.peer.connect(S.hostPeerId);
+    S.hostConn = conn;
+
+    conn.on('open', () => {
+      conn.send({ type: 'JOIN', data: { nickname } });
+      showLobbyClient();
+    });
+
+    conn.on('data', (data) => {
+      if (data.type === 'PLAYER_LIST') {
+        S.players = data.data.players;
+        renderPlayerList();
+      } else if (data.type === 'STATE_UPDATE') {
+        S.myRole = data.data.yourRole;
+        S.gameData = data.data;
+        // Sync resources locally for display
+        S.game.resources = data.data.resources;
+        showScreen('game');
+        renderGameUI(data.data);
+        // Append existing events
+        if (data.data.events) {
+          data.data.events.forEach(e => appendEvent(e.text, e.cls || 'event-info'));
+        }
+      } else if (data.type === 'EVENT') {
+        appendEvent(data.data.text, data.data.cls || 'event-info');
+        // Also update local resource copy if included
+        if (data.data.resources) {
+          S.game.resources = data.data.resources;
+          renderResources(data.data.resources);
+        }
+      }
+    });
+
+    conn.on('close', () => {
+      appendEvent('❌ La conexión con el Host se ha perdido.', 'event-thing');
+    });
+  });
+
+  S.peer.on('error', (err) => {
+    if (err.type === 'peer-unavailable') {
+      showSetupError(`No se encontró la sala "${escHtml(hostId)}". Verifica el ID.`);
+    } else {
+      showSetupError('Error de conexión: ' + err.message);
+    }
+  });
+}
+
+function broadcast(data) {
+  if (S.mode !== 'host') return;
+  Object.values(S.connections).forEach(conn => {
+    if (conn.open) conn.send(data);
+  });
+}
+
+function sendToPlayer(playerId, data) {
+  const conn = S.connections[playerId];
+  if (conn && conn.open) conn.send(data);
+}
+
+function sendToHost(data) {
+  if (S.hostConn && S.hostConn.open) S.hostConn.send(data);
+}
+
+function broadcastWithState() {
+  if (S.mode !== 'host') return;
+  S.game.players.forEach(p => {
+    const filtered = hostGetFilteredState(p.id);
+    if (p.id === S.myPeerId) {
+      // Update host's own display directly
+      S.myRole = filtered.yourRole;
+      S.gameData = filtered;
+      if (S.game.phase === 'playing') {
+        showScreen('game');
+        renderGameUI(filtered);
+      }
+    } else {
+      sendToPlayer(p.id, { type: 'STATE_UPDATE', data: filtered });
+    }
+  });
+}
+
+// ============================================================
+// HOST GAME LOGIC
+// ============================================================
+function hostAssignRoles() {
+  const players = S.game.players;
+  if (players.length < 2) return;
+
+  const thingIdx = Math.floor(Math.random() * players.length);
+  players.forEach((p, i) => {
+    p.role = i === thingIdx ? 'thing' : 'human';
+  });
+  S.game.phase = 'playing';
+  S.game.events = [];
+
+  // Log system event on host
+  appendEventSystem(`🎮 La partida ha comenzado. Somos ${players.length} tripulantes.`);
+  S.game.events.push({ text: '🎮 La partida ha comenzado.', cls: 'event-system' });
+
+  broadcastWithState();
+}
+
+function hostHandleAction(playerId, action) {
+  const player = S.game.players.find(p => p.id === playerId);
+  if (!player) return;
+
+  if (action === 'sabotage_boiler') {
+    if (player.role === 'thing') {
+      S.game.resources.temperature = Math.max(0, S.game.resources.temperature - 10);
+      const temp = S.game.resources.temperature;
+      const msg = `🔥 ¡Alguien ha saboteado la caldera! Temperatura: ${temp}°C`;
+      appendEvent(msg, 'event-thing');
+      S.game.events.push({ text: msg, cls: 'event-thing' });
+
+      // Broadcast event + updated resources to all
+      const eventData = { type: 'EVENT', data: { text: msg, cls: 'event-thing', resources: { ...S.game.resources } } };
+      broadcast(eventData);
+      // Also update host's own resource display
+      if (S.game.phase === 'playing') renderResources(S.game.resources);
+    }
+    // Human: silently ignored
+  }
+}
+
+function hostGetFilteredState(playerId) {
+  const player = S.game.players.find(p => p.id === playerId);
+  if (!player) return null;
+
+  const others = S.game.players.filter(p => p.id !== playerId).map(p => ({
+    nickname: p.nickname
+  }));
+
+  const base = {
+    phase: S.game.phase,
+    resources: { ...S.game.resources },
+    players: S.game.players.map(p => ({ nickname: p.nickname })),
+    others,
+    events: S.game.events.slice(-50)
+  };
+
+  if (player.role === 'thing') {
+    return {
+      ...base,
+      yourRole: 'thing',
+      infected: S.game.players.map(p => p.role === 'thing')
+    };
+  } else {
+    return {
+      ...base,
+      yourRole: 'human'
+    };
+  }
+}
+
+// ============================================================
+// PLAYER ACTION (called from UI, both host and client)
+// ============================================================
+function playerAction(action) {
+  if (S.mode === 'host') {
+    hostHandleAction(S.myPeerId, action);
+  } else {
+    sendToHost({ type: 'ACTION', data: { action } });
+  }
+}
+
+// ============================================================
+// UI SCREENS
+// ============================================================
+function showLobbyHost() {
+  showScreen('lobby');
+  $('lobby-host-info').innerHTML = `
+    <h2>🎉 Sala creada</h2>
+    <p class="sub">Comparte este ID con los demás jugadores:</p>
+    <div class="room-id-display">
+      <span class="badge">SALA</span>
+      <span style="flex:1;">${escHtml(S.hostPeerId)}</span>
+      <button class="btn btn-sm btn-outline" id="btn-copy-id" onclick="copyRoomId()">📋 Copiar</button>
+    </div>
+    <span id="copy-feedback" class="copied-tooltip">✅ Copiado</span>
+  `;
+  $('lobby-host-controls').style.display = 'block';
+  $('lobby-client-msg').style.display = 'none';
+  renderPlayerList();
+  updateStartButton();
+  appendEventLobby(`🎮 Sala creada. ID: ${S.hostPeerId}`);
+}
+
+function showLobbyClient() {
+  showScreen('lobby');
+  $('lobby-host-info').innerHTML = `
+    <h2>🔗 Conectado a la sala</h2>
+    <div class="room-id-display">
+      <span class="badge">SALA</span>
+      <span>${escHtml(S.hostPeerId)}</span>
+    </div>
+  `;
+  $('lobby-host-controls').style.display = 'none';
+  $('lobby-client-msg').style.display = 'block';
+  renderPlayerList();
+}
+
+function updateStartButton() {
+  const btn = $('btn-start');
+  const count = S.players.length;
+  btn.disabled = count < 2;
+  btn.textContent = count < 2 ? `▶️ Empezar partida (${count}/2 jugadores)` : `▶️ Empezar partida (${count} jugadores)`;
+}
+
+function appendEventLobby(text) {
+  // Just log to console for now
+  console.log('[LOBBY]', text);
+}
+
+function appendEventSystem(text) {
+  appendEvent(text, 'event-system');
+}
+
+function showSetupError(msg) {
+  const el = $('setup-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function copyRoomId() {
+  if (S.hostPeerId) {
+    navigator.clipboard.writeText(S.hostPeerId).then(() => {
+      const fb = $('copy-feedback');
+      fb.classList.add('show');
+      setTimeout(() => fb.classList.remove('show'), 2000);
+    }).catch(() => {
+      // Fallback: select text
+      const range = document.createRange();
+      const el = document.querySelector('.room-id-display span:nth-child(2)');
+      if (el) { range.selectNode(el); window.getSelection().removeAllRanges(); window.getSelection().addRange(range); }
+    });
+  }
+}
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+
+  // --- Setup focus ---
+  $('setup-nick').focus();
+  $('setup-nick').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-create').click(); });
+  $('setup-join-id').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-join').click(); });
+
+  // --- Create room ---
+  $('btn-create').addEventListener('click', () => {
+    const nick = $('setup-nick').value.trim();
+    if (!nick) { showSetupError('Introduce tu nombre.'); return; }
+    $('setup-error').style.display = 'none';
+    createRoom(nick);
+  });
+
+  // --- Join room ---
+  $('btn-join').addEventListener('click', () => {
+    const nick = $('setup-nick').value.trim();
+    const id = $('setup-join-id').value.trim().toUpperCase();
+    if (!nick) { showSetupError('Introduce tu nombre.'); return; }
+    if (!id) { showSetupError('Introduce el ID de la sala.'); return; }
+    $('setup-error').style.display = 'none';
+    joinRoom(id, nick);
+  });
+
+  // --- Start game ---
+  $('btn-start').addEventListener('click', () => {
+    hostAssignRoles();
+  });
+
+});
+</script>
+</body>
+</html>
